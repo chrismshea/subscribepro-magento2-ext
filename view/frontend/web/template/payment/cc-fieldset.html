@@ -42,8 +42,6 @@
             <div class="hosted-error"><!-- ko i18n: 'Please, enter valid Credit Card Number'--><!-- /ko --></div>
         </div>
         <input type="hidden" name="token" data-bind="attr: {id: getCode() + '_token'}, value: paymentMethodToken">
-        <input type="hidden" name="token" data-bind="attr: {id: getCode() + '_first_digits'}, value: creditcardFirstDigits">
-        <input type="hidden" name="token" data-bind="attr: {id: getCode() + '_last_digits'}, value: creditcardLastDigits">
     </div>
 
     <div class="field date required" data-bind="attr: {id: getCode() + '_cc_type_exp_div'}">

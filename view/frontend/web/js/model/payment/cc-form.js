@@ -36,6 +36,8 @@ define(
                 creditCardExpYearFocus: null,
                 paymentMethodToken: null,
                 selectedCardType: null,
+                creditcardFirstDigits: null,
+                creditcardLastDigits: null,
                 show3DSiFrame: false
             },
 
@@ -48,6 +50,8 @@ define(
                         'creditCardExpYearFocus',
                         'paymentMethodToken',
                         'selectedCardType',
+                        'creditcardFirstDigits',
+                        'creditcardLastDigits',
                         'show3DSiFrame'
                     ]);
 

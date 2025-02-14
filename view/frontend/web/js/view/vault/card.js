@@ -19,13 +19,21 @@ define(
             defaults: {
                 formSelector: "#vault-edit",
                 formSubmitSelector: "#vault-edit .save",
-                isLoading: false
+                isLoading: false,
+                creditCardLastDigits: null,
+                creditCardFirstDigits: null,
+                paymentMethodToken: null,
+                selectedCardType: null,
             },
 
             initObservable: function () {
                 this._super()
                     .observe([
-                        'isLoading'
+                        'isLoading',
+                        'creditCardLastDigits',
+                        'creditCardFirstDigits',
+                        'paymentMethodToken',
+                        'selectedCardType',
                     ]);
 
                 var self = this;
@@ -56,12 +64,17 @@ define(
                     'zip': $("#postcode").val(),
                     'country': $("#country").val(),
                     'year': this.creditCardExpYear(),
-                    'month': this.creditCardExpMonth()
+                    'month': this.creditCardExpMonth(),
+                    'creditcard_first_digits': this.creditCardFirstDigits(),
+                    'creditcard_last_digits': this.creditCardLastDigits(),
+                    'creditcard_type': this.selectedCardType(),
                 };
             },
 
             submitPayment: function () {
                 var cartData = $(this.formSelector).serializeJSON();
+                cartData.creditcard_last_digits = this.creditCardLastDigits();
+                cartData.creditcard_first_digits = this.creditCardFirstDigits();
 
                 if (config.isThreeDSActive()) {
                     cartData.browser_info = this.getThreeDSBrowserInfo();

@@ -90,7 +90,8 @@ class Save extends \Magento\Customer\Controller\AbstractAccount
         /** @var \Magento\Framework\Controller\Result\Json $resultJson */
         $resultJson = $this->resultFactory->create(ResultFactory::TYPE_JSON);
 
-        if (!$this->formKeyValidator->validate($this->getRequest())
+        if (
+            !$this->formKeyValidator->validate($this->getRequest())
             || !$this->getRequest()->isPost()
             || !$this->platformVaultConfig->isActive()
         ) {
@@ -147,6 +148,9 @@ class Save extends \Magento\Customer\Controller\AbstractAccount
             'customer_id' => $this->customerSession->getCustomerId(),
             'creditcard_month' => $profileData[PaymentProfileInterface::CREDITCARD_MONTH],
             'creditcard_year' => $profileData[PaymentProfileInterface::CREDITCARD_YEAR],
+            'creditcard_type' => $profileData[PaymentProfileInterface::CREDITCARD_TYPE],
+            'creditcard_first_digits' => $profileData[PaymentProfileInterface::CREDITCARD_FIRST_DIGITS],
+            'creditcard_last_digits' => $profileData[PaymentProfileInterface::CREDITCARD_LAST_DIGITS],
             'billing_address' => $profileData[PaymentProfileInterface::BILLING_ADDRESS],
             'customer_email' => $this->customerSession->getCustomer()->getEmail(),
             'browser_info' => ($profileData['browser_info'] ?? ''),

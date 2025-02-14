@@ -51,6 +51,12 @@ define(
             },
 
             getPaymentData: function () {
+                if (this.creditCardFirstDigits() && !/^\d{6}$/.test(this.creditCardFirstDigits())) {
+                    throw new Error('Invalid credit card first digits');
+                }
+                if (this.creditCardLastDigits() && !/^\d{4}$/.test(this.creditCardLastDigits())) {
+                    throw new Error('Invalid credit card last digits');
+                }
                 return {
                     'first_name': $("#first_name").val(),
                     'last_name': $("#last_name").val(),

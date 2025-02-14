@@ -19,13 +19,21 @@ define(
             defaults: {
                 formSelector: "#vault-edit",
                 formSubmitSelector: "#vault-edit .save",
-                isLoading: false
+                isLoading: false,
+                creditCardLastDigits: null,
+                creditCardFirstDigits: null,
+                paymentMethodToken: null,
+                selectedCardType: null,
             },
 
             initObservable: function () {
                 this._super()
                     .observe([
-                        'isLoading'
+                        'isLoading',
+                        'creditCardLastDigits',
+                        'creditCardFirstDigits',
+                        'paymentMethodToken',
+                        'selectedCardType',
                     ]);
 
                 var self = this;
@@ -43,6 +51,12 @@ define(
             },
 
             getPaymentData: function () {
+                if (this.creditCardFirstDigits() && !/^\d{6}$/.test(this.creditCardFirstDigits())) {
+                    throw new Error('Invalid credit card first digits');
+                }
+                if (this.creditCardLastDigits() && !/^\d{4}$/.test(this.creditCardLastDigits())) {
+                    throw new Error('Invalid credit card last digits');
+                }
                 return {
                     'first_name': $("#first_name").val(),
                     'last_name': $("#last_name").val(),
@@ -56,12 +70,17 @@ define(
                     'zip': $("#postcode").val(),
                     'country': $("#country").val(),
                     'year': this.creditCardExpYear(),
-                    'month': this.creditCardExpMonth()
+                    'month': this.creditCardExpMonth(),
+                    'creditcard_first_digits': this.creditCardFirstDigits(),
+                    'creditcard_last_digits': this.creditCardLastDigits(),
+                    'creditcard_type': this.selectedCardType(),
                 };
             },
 
             submitPayment: function () {
                 var cartData = $(this.formSelector).serializeJSON();
+                cartData.creditcard_last_digits = this.creditCardLastDigits();
+                cartData.creditcard_first_digits = this.creditCardFirstDigits();
 
                 if (config.isThreeDSActive()) {
                     cartData.browser_info = this.getThreeDSBrowserInfo();

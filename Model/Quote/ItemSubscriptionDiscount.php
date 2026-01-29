@@ -7,7 +7,7 @@ use Magento\Quote\Model\Quote\Item\AbstractItem as QuoteItem;
 
 class ItemSubscriptionDiscount
 {
-    public const KEY_DISCOUNT_DESCRIPTION = 'subscription';
+    public const KEY_DISCOUNT_DESCRIPTION = "subscription";
 
     /**
      * @var \Swarming\SubscribePro\Model\Config\SubscriptionDiscount
@@ -46,7 +46,7 @@ class ItemSubscriptionDiscount
         \Swarming\SubscribePro\Platform\Manager\Product $platformProductManager,
         \Swarming\SubscribePro\Helper\QuoteItem $quoteItemHelper,
         \Magento\Framework\Pricing\PriceCurrencyInterface $priceCurrency,
-        \Swarming\SubscribePro\Helper\SalesRuleValidator $salesRuleValidatorHelper
+        \Swarming\SubscribePro\Helper\SalesRuleValidator $salesRuleValidatorHelper,
     ) {
         $this->subscriptionDiscountConfig = $subscriptionDiscountConfig;
         $this->platformProductManager = $platformProductManager;
@@ -59,25 +59,56 @@ class ItemSubscriptionDiscount
      * @param \Magento\Quote\Model\Quote\Item\AbstractItem $item
      * @param float $itemBasePrice
      * @param callable $rollbackCallback
+     * @param string|null $subscriptionLabel
      */
-    public function processSubscriptionDiscount(QuoteItem $item, $itemBasePrice, callable $rollbackCallback)
-    {
+    public function processSubscriptionDiscount(
+        QuoteItem $item,
+        $itemBasePrice,
+        callable $rollbackCallback,
+        $subscriptionLabel = null,
+    ) {
         $storeId = $item->getQuote()->getStoreId();
         $baseCartDiscount = $item->getBaseDiscountAmount();
 
         $platformProduct = $this->getPlatformProduct($item);
         $baseSubscriptionDiscount = $subscriptionDiscount = $this->priceCurrency->convertAndRound(
-            $this->getBaseSubscriptionDiscount($platformProduct, $itemBasePrice, $item->getQty()),
-            $storeId
+            $this->getBaseSubscriptionDiscount(
+                $platformProduct,
+                $itemBasePrice,
+                $item->getQty(),
+            ),
+            $storeId,
         );
 
-        if ($this->isOnlySubscriptionDiscount($baseSubscriptionDiscount, $baseCartDiscount, $storeId)) {
+        if (
+            $this->isOnlySubscriptionDiscount(
+                $baseSubscriptionDiscount,
+                $baseCartDiscount,
+                $storeId,
+            )
+        ) {
+            // Subscription discount wins - rollback cart rules and apply subscription
             $rollbackCallback($item);
-            $this->setSubscriptionDiscount($item, $subscriptionDiscount, $baseSubscriptionDiscount);
-            $this->addDiscountDescription($item);
+            $this->setSubscriptionDiscount(
+                $item,
+                $subscriptionDiscount,
+                $baseSubscriptionDiscount,
+            );
+            $this->setSubscriptionDiscountDescription(
+                $item,
+                $subscriptionLabel,
+            );
         } elseif ($this->isCombineDiscounts($storeId)) {
-            $this->addSubscriptionDiscount($item, $subscriptionDiscount, $baseSubscriptionDiscount);
-            $this->addDiscountDescription($item);
+            // Combine mode - add subscription discount to cart discount, keep both labels
+            $this->addSubscriptionDiscount(
+                $item,
+                $subscriptionDiscount,
+                $baseSubscriptionDiscount,
+            );
+            // Labels are already combined (SP label added when rule processed, cart label from before)
+        } else {
+            // Cart discount wins - rollback to remove Subscribe Pro rule and label
+            $rollbackCallback($item);
         }
     }
 
@@ -86,16 +117,27 @@ class ItemSubscriptionDiscount
      * @param float $subscriptionDiscount
      * @param float $baseSubscriptionDiscount
      */
-    protected function setSubscriptionDiscount(QuoteItem $item, $subscriptionDiscount, $baseSubscriptionDiscount)
-    {
+    protected function setSubscriptionDiscount(
+        QuoteItem $item,
+        $subscriptionDiscount,
+        $baseSubscriptionDiscount,
+    ) {
         if ($item->getChildren() && $item->isChildrenCalculated()) {
             $childItemCount = count($item->getChildren());
-            $childSubscriptionDiscount = round(($subscriptionDiscount * 1.0) / $childItemCount, 2);
-            $childBaseSubscriptionDiscount = round(($baseSubscriptionDiscount * 1.0) / $childItemCount, 2);
+            $childSubscriptionDiscount = round(
+                ($subscriptionDiscount * 1.0) / $childItemCount,
+                2,
+            );
+            $childBaseSubscriptionDiscount = round(
+                ($baseSubscriptionDiscount * 1.0) / $childItemCount,
+                2,
+            );
 
             foreach ($item->getChildren() as $childItem) {
                 $childItem->setDiscountAmount($childSubscriptionDiscount);
-                $childItem->setBaseDiscountAmount($childBaseSubscriptionDiscount);
+                $childItem->setBaseDiscountAmount(
+                    $childBaseSubscriptionDiscount,
+                );
             }
         } else {
             $item->setDiscountAmount($subscriptionDiscount);
@@ -108,36 +150,60 @@ class ItemSubscriptionDiscount
      * @param float $subscriptionDiscount
      * @param float $baseSubscriptionDiscount
      */
-    protected function addSubscriptionDiscount(QuoteItem $item, $subscriptionDiscount, $baseSubscriptionDiscount)
-    {
+    protected function addSubscriptionDiscount(
+        QuoteItem $item,
+        $subscriptionDiscount,
+        $baseSubscriptionDiscount,
+    ) {
         if ($item->getChildren() && $item->isChildrenCalculated()) {
             $childItemCount = count($item->getChildren());
-            $childSubscriptionDiscount = round(($subscriptionDiscount * 1.0) / $childItemCount, 2);
-            $childBaseSubscriptionDiscount = round(($baseSubscriptionDiscount * 1.0) / $childItemCount, 2);
+            $childSubscriptionDiscount = round(
+                ($subscriptionDiscount * 1.0) / $childItemCount,
+                2,
+            );
+            $childBaseSubscriptionDiscount = round(
+                ($baseSubscriptionDiscount * 1.0) / $childItemCount,
+                2,
+            );
 
             foreach ($item->getChildren() as $childItem) {
-                $newDiscountAmount = $childItem->getDiscountAmount() + $childSubscriptionDiscount;
+                $newDiscountAmount =
+                    $childItem->getDiscountAmount() +
+                    $childSubscriptionDiscount;
                 $childItem->setDiscountAmount($newDiscountAmount);
 
-                $newBaseDiscountAmount = $childItem->getBaseDiscountAmount() + $childBaseSubscriptionDiscount;
+                $newBaseDiscountAmount =
+                    $childItem->getBaseDiscountAmount() +
+                    $childBaseSubscriptionDiscount;
                 $childItem->setBaseDiscountAmount($newBaseDiscountAmount);
             }
         } else {
-            $newDiscountAmount = $item->getDiscountAmount() + $subscriptionDiscount;
+            $newDiscountAmount =
+                $item->getDiscountAmount() + $subscriptionDiscount;
             $item->setDiscountAmount($newDiscountAmount);
 
-            $newBaseDiscountAmount = $item->getBaseDiscountAmount() + $baseSubscriptionDiscount;
+            $newBaseDiscountAmount =
+                $item->getBaseDiscountAmount() + $baseSubscriptionDiscount;
             $item->setBaseDiscountAmount($newBaseDiscountAmount);
         }
     }
 
     /**
+     * Set discount description to show only subscription label
+     *
      * @param \Magento\Quote\Model\Quote\Item\AbstractItem $item
+     * @param string|null $subscriptionLabel
      */
-    protected function addDiscountDescription(QuoteItem $item)
-    {
-        $discountDescriptions = $item->getAddress()->getDiscountDescriptionArray();
-        $item->getAddress()->setDiscountDescriptionArray($discountDescriptions);
+    protected function setSubscriptionDiscountDescription(
+        QuoteItem $item,
+        $subscriptionLabel = null,
+    ) {
+        // Use the provided subscription label, or fall back to "Subscription"
+        $label = $subscriptionLabel ?: __("Subscription");
+
+        $item->getAddress()->setDiscountDescriptionArray([
+            self::KEY_DISCOUNT_DESCRIPTION => $label,
+        ]);
     }
 
     /**
@@ -147,7 +213,10 @@ class ItemSubscriptionDiscount
     protected function getPlatformProduct(QuoteItem $item)
     {
         $sku = $item->getProduct()->getData(ProductInterface::SKU);
-        return $this->platformProductManager->getProduct($sku, $item->getQuote()->getStore()->getWebsiteId());
+        return $this->platformProductManager->getProduct(
+            $sku,
+            $item->getQuote()->getStore()->getWebsiteId(),
+        );
     }
 
     /**
@@ -156,13 +225,16 @@ class ItemSubscriptionDiscount
      * @param float $qty
      * @return float
      */
-    protected function getBaseSubscriptionDiscount($platformProduct, $itemBasePrice, $qty)
-    {
+    protected function getBaseSubscriptionDiscount(
+        $platformProduct,
+        $itemBasePrice,
+        $qty,
+    ) {
         return $this->salesRuleValidatorHelper->getBaseSubscriptionDiscount(
             $platformProduct->getIsDiscountPercentage(),
             $platformProduct->getDiscount(),
             $itemBasePrice,
-            $qty
+            $qty,
         );
     }
 
@@ -173,12 +245,15 @@ class ItemSubscriptionDiscount
      *
      * @return bool
      */
-    protected function isOnlySubscriptionDiscount($baseSubscriptionDiscount, $baseCartDiscount, $storeId)
-    {
+    protected function isOnlySubscriptionDiscount(
+        $baseSubscriptionDiscount,
+        $baseCartDiscount,
+        $storeId,
+    ) {
         return $this->salesRuleValidatorHelper->isOnlySubscriptionDiscount(
             $baseSubscriptionDiscount,
             $baseCartDiscount,
-            $this->subscriptionDiscountConfig->getCartRuleCombineType($storeId)
+            $this->subscriptionDiscountConfig->getCartRuleCombineType($storeId),
         );
     }
 
@@ -189,7 +264,7 @@ class ItemSubscriptionDiscount
     protected function isCombineDiscounts($storeId)
     {
         return $this->salesRuleValidatorHelper->isCombineDiscounts(
-            $this->subscriptionDiscountConfig->getCartRuleCombineType($storeId)
+            $this->subscriptionDiscountConfig->getCartRuleCombineType($storeId),
         );
     }
 }

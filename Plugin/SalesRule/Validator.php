@@ -9,9 +9,9 @@ use Magento\SalesRule\Model\Validator as SalesRuleValidator;
 
 class Validator
 {
-    public const QUOTE_ITEM_RULES = 'quoteItemRules';
-    public const QUOTE_RULES = 'quoteRules';
-    public const ADDRESS_RULES = 'addressRules';
+    public const QUOTE_ITEM_RULES = "quoteItemRules";
+    public const QUOTE_RULES = "quoteRules";
+    public const ADDRESS_RULES = "addressRules";
 
     /**
      * @var \Swarming\SubscribePro\Model\Config\SubscriptionDiscount
@@ -43,7 +43,7 @@ class Validator
         \Swarming\SubscribePro\Model\Config\SubscriptionDiscount $subscriptionDiscountConfig,
         \Swarming\SubscribePro\Model\Quote\ItemSubscriptionDiscount $itemSubscriptionDiscount,
         \Swarming\SubscribePro\Model\CatalogRule\InspectorInterface $catalogRuleInspector,
-        \Swarming\SubscribePro\Helper\QuoteItem $quoteItemHelper
+        \Swarming\SubscribePro\Helper\QuoteItem $quoteItemHelper,
     ) {
         $this->subscriptionDiscountConfig = $subscriptionDiscountConfig;
         $this->itemSubscriptionDiscount = $itemSubscriptionDiscount;
@@ -59,19 +59,42 @@ class Validator
      *
      * @return \Magento\SalesRule\Model\Validator
      */
-    public function aroundProcess(SalesRuleValidator $subject, \Closure $proceed, AbstractItem $item, Rule $rule)
-    {
+    public function aroundProcess(
+        SalesRuleValidator $subject,
+        \Closure $proceed,
+        AbstractItem $item,
+        Rule $rule,
+    ) {
+        // Only capture state for Subscribe Pro Discount rule to avoid overhead
+        if ($rule->getName() !== "Subscribe Pro Discount") {
+            return $proceed($item, $rule);
+        }
+
+        // Capture state before Subscribe Pro Discount rule processes
         $appliedRuleIds = [
             self::QUOTE_ITEM_RULES => $item->getAppliedRuleIds(),
             self::QUOTE_RULES => $item->getQuote()->getAppliedRuleIds(),
             self::ADDRESS_RULES => $item->getAddress()->getAppliedRuleIds(),
         ];
-        $discountDescriptions = (array)$item->getAddress()->getDiscountDescriptionArray();
+        $discountDescriptions = (array) $item
+            ->getAddress()
+            ->getDiscountDescriptionArray();
 
+        // Process the Subscribe Pro Discount rule
         $result = $proceed($item, $rule);
 
-        if ($rule->getName() !== 'Subscribe Pro Discount') {
-            return $result;
+        // Capture the Subscribe Pro rule's label after it processes
+        $subscriptionLabel = null;
+        $descriptionsAfter = (array) $item
+            ->getAddress()
+            ->getDiscountDescriptionArray();
+        // Find the label that was added by the Subscribe Pro rule
+        $newDescriptions = array_diff_assoc(
+            $descriptionsAfter,
+            $discountDescriptions,
+        );
+        if (!empty($newDescriptions)) {
+            $subscriptionLabel = reset($newDescriptions);
         }
 
         $websiteId = $item->getQuote()->getStore()->getWebsiteId();
@@ -84,8 +107,11 @@ class Validator
         }
 
         $storeCode = $item->getQuote()->getStore()->getCode();
-        if ($this->catalogRuleInspector->isApplied($item->getProduct())
-            && !$this->subscriptionDiscountConfig->isApplyDiscountToCatalogPrice($storeCode)
+        if (
+            $this->catalogRuleInspector->isApplied($item->getProduct()) &&
+            !$this->subscriptionDiscountConfig->isApplyDiscountToCatalogPrice(
+                $storeCode,
+            )
         ) {
             return $result;
         }
@@ -93,7 +119,8 @@ class Validator
         $this->itemSubscriptionDiscount->processSubscriptionDiscount(
             $item,
             $subject->getItemBasePrice($item),
-            $this->getRollbackCallback($appliedRuleIds, $discountDescriptions)
+            $this->getRollbackCallback($appliedRuleIds, $discountDescriptions),
+            $subscriptionLabel,
         );
 
         return $result;
@@ -105,14 +132,27 @@ class Validator
      * @return callable
      * @codeCoverageIgnore
      */
-    protected function getRollbackCallback($appliedRuleIds, $discountDescriptions)
-    {
-        return function (QuoteItem $item) use ($appliedRuleIds, $discountDescriptions) {
+    protected function getRollbackCallback(
+        $appliedRuleIds,
+        $discountDescriptions,
+    ) {
+        return function (QuoteItem $item) use (
+            $appliedRuleIds,
+            $discountDescriptions,
+        ) {
             $item->setAppliedRuleIds($appliedRuleIds[self::QUOTE_ITEM_RULES]);
-            $item->getAddress()->setAppliedRuleIds($appliedRuleIds[self::ADDRESS_RULES]); /* @phpstan-ignore-line */
-            $item->getQuote()->setAppliedRuleIds($appliedRuleIds[self::QUOTE_RULES]);
+            $item
+                ->getAddress()
+                ->setAppliedRuleIds(
+                    $appliedRuleIds[self::ADDRESS_RULES],
+                ); /* @phpstan-ignore-line */
+            $item
+                ->getQuote()
+                ->setAppliedRuleIds($appliedRuleIds[self::QUOTE_RULES]);
 
-            $item->getAddress()->setDiscountDescriptionArray($discountDescriptions);
+            $item
+                ->getAddress()
+                ->setDiscountDescriptionArray($discountDescriptions);
         };
     }
 }
